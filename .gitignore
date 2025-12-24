@@ -6,9 +6,6 @@
 /data/*.db*
 
 # Models & checkpoints
-/models/
-*.pt
-*.pth
 
 # Python
 __pycache__/
