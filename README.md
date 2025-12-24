@@ -35,6 +35,36 @@ core/
 └── api/
 		└── main.py           # FastAPI app
 
+Desktop UI Options
+- Streamlit: Fast to prototype in a browser, simple layout for 2x2 camera grid, easy deployment. However, low-latency multi-camera streaming and tight OpenCV threading can be tricky; best for dashboards and light interactivity.
+- customtkinter: Native desktop UI on Windows, better control over threads and OpenCV windows, straightforward access to local cameras, and lower latency. Recommended for a 4-camera grid with real-time "Check In" (capture face + plate) and "Check Out" (verify + pricing).
+
+Recommendation: Use customtkinter for a responsive, kiosk-style app with four camera tiles and buttons. The core provides frame-based methods `handle_entry_frame()` and `handle_exit_frame()` in `core/decision/verifier.py` to integrate directly with cv2 frames.
+
+GUI (customtkinter)
+- Run the desktop app:
+	- `python main.py`
+- In the app:
+	- Set each tile's source (index like 0/1 or URL), choose role `Plate` or `Face` for at least one tile each.
+	- Press `Check In` to create a session; `Check Out` to verify and compute fee.
+- Uses `insightface` for face embeddings and PaddleOCR for plate OCR.
+
+Camera Sources
+- Local webcams (Windows): use indices `0`, `1`, `2`, ...; you can probe available indices with the helper script.
+- IP cameras (RTSP): example `rtsp://user:pass@192.168.1.50:554/Streaming/Channels/101`.
+- HTTP MJPEG: example `http://192.168.1.60/mjpeg` (if your camera exposes MJPEG).
+- Video files: provide a file path like `e:/videos/test.mp4`.
+
+List available camera indices:
+- Run: `python core/ui/list_cameras.py --max 10 --backend dshow`
+- If none are found, try `--backend msmf` or `--backend default`.
+
+Windows laptop camera tips
+- Backend: `msmf` thường ổn định hơn `dshow` với camera tích hợp.
+- Độ phân giải: ứng dụng sẽ yêu cầu 640x480 @30fps để tăng tốc khởi tạo.
+- Codec: ứng dụng thử yêu cầu MJPG; nếu driver không hỗ trợ, sẽ dùng mặc định.
+- Tránh trùng lặp: đảm bảo không app nào khác đang dùng camera (Teams/Zoom/etc.).
+
 Quickstart (Windows)
 1) Create a virtual environment and install dependencies:
 		python -m venv .venv
@@ -84,3 +114,4 @@ Non-goals
 Roadmap hooks
 - Add PostgreSQL option for production
 - Add basic auth / API keys if needed
+ - Add customtkinter-based desktop UI (4-camera grid, actions)

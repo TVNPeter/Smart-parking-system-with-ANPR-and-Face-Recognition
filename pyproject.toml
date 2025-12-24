@@ -19,4 +19,5 @@ dependencies = [
     "sqlalchemy>=2.0",
     "torch>=2.3",
     "uvicorn[standard]>=0.24",
+    "customtkinter>=5.2.0",
 ]

@@ -9,3 +9,4 @@ opencv-python-headless>=4.8
 insightface>=0.7
 paddleocr>=2.7
 rapidfuzz>=3.0
+customtkinter>=5.2.0
