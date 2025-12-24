@@ -1,5 +1,7 @@
 def main():
-    print("Hello from project!")
+    # Launch the desktop GUI (customtkinter)
+    from core.ui.tk_app import main as gui_main
+    gui_main()
 
 
 if __name__ == "__main__":

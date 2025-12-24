@@ -1,6 +1,0 @@
-path: E:\2025-2026\HKI\DIPR\Project\LP_detection
-train: images/train
-val: images/val
-nc: 1
-names:
-  0: plate
