@@ -19,6 +19,5 @@ PRICE_PER_HOUR = float(os.getenv("PRICE_PER_HOUR", "2.0"))
 PLATE_REGEX = os.getenv("PLATE_REGEX", r"[0-9]{2}[A-Z]?[\-\s]?[A-Z]?[0-9]{4,6}")
 PLATE_MIN_CONF = float(os.getenv("PLATE_MIN_CONF", "0.2"))
 
-YOLO_PLATE_MODEL = os.getenv("YOLO_PLATE_MODEL", "")
 INSIGHTFACE_MODEL = os.getenv("INSIGHTFACE_MODEL", "buffalo_l")
 INSIGHTFACE_PROVIDER = os.getenv("INSIGHTFACE_PROVIDER", "CPUExecutionProvider")

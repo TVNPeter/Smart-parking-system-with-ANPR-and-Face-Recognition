@@ -9,7 +9,7 @@ import numpy as np
 
 from core.anpr.detector import LicensePlateDetector
 from core.anpr.ocr import PlateOCR
-from core.config import FACE_THRESHOLD, PRICE_PER_HOUR, YOLO_PLATE_MODEL
+from core.config import FACE_THRESHOLD, PRICE_PER_HOUR
 from core.db.database import SessionLocal
 from core.face.recognizer import FaceRecognizer
 from core.session.manager import SessionManager
@@ -43,7 +43,7 @@ class ExitResult:
 class Verifier:
     def __init__(self) -> None:
         self.ocr = PlateOCR()
-        self.detector = LicensePlateDetector(self.ocr, model_path=YOLO_PLATE_MODEL if YOLO_PLATE_MODEL else None)
+        self.detector = LicensePlateDetector(self.ocr)
         self.face = FaceRecognizer()
         self.sessions = SessionManager()
 

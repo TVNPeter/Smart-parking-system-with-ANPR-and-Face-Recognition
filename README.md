@@ -20,7 +20,7 @@ API
 Project Structure
 core/
 ├── anpr/
-│   ├── detector.py       # Plate localization via OCR (swap for YOLO later)
+│   ├── detector.py       # Plate localization via OCR-only
 │   └── ocr.py            # PaddleOCR wrapper
 ├── face/
 │   ├── detector.py       # Thin detector wrapper using insightface
@@ -51,7 +51,7 @@ Quickstart (Windows)
 		curl -X POST http://localhost:8000/exit -F "image=@sample_exit.jpg"
 
 Notes on Models
-- Plate detection: The current demo localizes plates using PaddleOCR text boxes. You can later plug in a YOLOv12-Nano/Small detector by replacing core/anpr/detector.py.
+- Plate detection: Demo uses PaddleOCR text boxes only (no detector model).
 - Face: insightface model family buffalo_l is used by default, running on CPU.
 
 Pricing
@@ -67,7 +67,6 @@ Environment variables (optional):
 - FACE_THRESHOLD (default: 0.38)
 - PRICE_PER_HOUR (default: 2.0)
 - PLATE_REGEX (default: [A-Z0-9\-]{5,10})
-- YOLO_PLATE_MODEL (optional; if you add a YOLO detector)
 - INSIGHTFACE_MODEL (default: buffalo_l)
 - INSIGHTFACE_PROVIDER (default: CPUExecutionProvider)
 
@@ -83,6 +82,5 @@ Non-goals
 - No retention beyond embeddings; embeddings are stored in DB as blobs
 
 Roadmap hooks
-- Swap in YOLOv12 detector for plates
 - Add PostgreSQL option for production
 - Add basic auth / API keys if needed
