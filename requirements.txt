@@ -1,0 +1,13 @@
+fastapi>=0.110
+uvicorn[standard]>=0.24
+SQLAlchemy>=2.0
+pydantic>=2.6
+python-multipart>=0.0.7
+numpy>=1.24
+pillow>=10.0.0
+opencv-python-headless>=4.8
+insightface>=0.7
+paddleocr>=2.7
+rapidfuzz>=3.0
+ultralytics>=8.2
+torch>=2.3
