@@ -20,5 +20,5 @@ PLATE_REGEX = os.getenv("PLATE_REGEX", r"[0-9]{2}[A-Z]?[\-\s]?[A-Z]?[0-9]{4,6}")
 PLATE_MIN_CONF = float(os.getenv("PLATE_MIN_CONF", "0.2"))
 
 YOLO_PLATE_MODEL = os.getenv("YOLO_PLATE_MODEL", "")
-INSIGHTFACE_MODEL = os.getenv("INSIGHTFACE_MODEL", "buffalo_l")
-INSIGHTFACE_PROVIDER = os.getenv("INSIGHTFACE_PROVIDER", "CPUExecutionProvider")
+# Face recognition model: "hog" (faster, CPU) or "cnn" (more accurate, requires GPU)
+FACE_RECOGNITION_MODEL = os.getenv("FACE_RECOGNITION_MODEL", "hog")

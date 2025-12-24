@@ -4,39 +4,57 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-from core.config import INSIGHTFACE_MODEL, INSIGHTFACE_PROVIDER
+from core.config import FACE_RECOGNITION_MODEL
+
+try:
+    import face_recognition  # type: ignore
+except ImportError:
+    face_recognition = None  # type: ignore
 
 
 class FaceRecognizer:
     def __init__(self) -> None:
-        self._app = None
-        self._ensure_app()
-
-    def _ensure_app(self) -> None:
-        if self._app is not None:
-            return
-        try:
-            from insightface.app import FaceAnalysis  # type: ignore
-
-            app = FaceAnalysis(name=INSIGHTFACE_MODEL, providers=[INSIGHTFACE_PROVIDER])
-            app.prepare(ctx_id=0, det_size=(640, 640))
-            self._app = app
-        except Exception:
-            self._app = None
+        self._available = face_recognition is not None
+        self._model = FACE_RECOGNITION_MODEL
+        if not self._available:
+            print("Warning: face_recognition library not available. Please install it: pip install face_recognition")
 
     def extract(self, image_bgr: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[Tuple[int, int, int, int]]]:
-        if self._app is None:
+        """
+        Extract face embedding and bounding box from BGR image.
+        Returns: (embedding, bbox) where bbox is (x1, y1, x2, y2)
+        """
+        if not self._available or face_recognition is None:
             return None, None
-        faces = self._app.get(image_bgr)
-        if not faces:
+        
+        # Convert BGR to RGB (face_recognition uses RGB)
+        image_rgb = image_bgr[:, :, ::-1]
+        
+        # Find face locations
+        face_locations = face_recognition.face_locations(image_rgb, model=self._model)
+        if not face_locations:
             return None, None
-        faces.sort(key=lambda f: f.bbox[2] * f.bbox[3], reverse=True)
-        f0 = faces[0]
-        emb = getattr(f0, "embedding", None)
-        if emb is None and hasattr(f0, "normed_embedding"):
-            emb = getattr(f0, "normed_embedding")
-        if emb is None:
+        
+        # Get face encodings
+        face_encodings = face_recognition.face_encodings(image_rgb, face_locations)
+        if not face_encodings:
             return None, None
-        vec = np.asarray(emb, dtype=np.float32)
-        bbox = tuple(int(x) for x in f0.bbox.astype(int).tolist())  # type: ignore
-        return vec, (bbox[0], bbox[1], bbox[2], bbox[3])
+        
+        # Select the largest face (by area)
+        def area(loc):
+            top, right, bottom, left = loc
+            return (bottom - top) * (right - left)
+        
+        largest_idx = max(range(len(face_locations)), key=lambda i: area(face_locations[i]))
+        
+        # Get encoding and location
+        encoding = face_encodings[largest_idx]
+        top, right, bottom, left = face_locations[largest_idx]
+        
+        # Convert to (x1, y1, x2, y2) format
+        bbox = (left, top, right, bottom)
+        
+        # Convert to numpy array with float32 dtype
+        vec = np.asarray(encoding, dtype=np.float32)
+        
+        return vec, bbox
