@@ -65,20 +65,57 @@ Windows laptop camera tips
 - Codec: ứng dụng thử yêu cầu MJPG; nếu driver không hỗ trợ, sẽ dùng mặc định.
 - Tránh trùng lặp: đảm bảo không app nào khác đang dùng camera (Teams/Zoom/etc.).
 
-Quickstart (Windows)
-1) Create a virtual environment and install dependencies:
-		python -m venv .venv
-		.venv\Scripts\activate
-		pip install -r requirements.txt
+## Quickstart
 
-2) Optional: Configure environment in .env (see .env.example). Default FACE_THRESHOLD=0.38.
+### Cài đặt nhanh (Windows/Linux/Mac)
 
-3) Run the server:
-		uvicorn core.api.main:app --reload --host 0.0.0.0 --port 8000
+**1. Clone repository:**
+```bash
+git clone <repository-url>
+cd Smart-parking-system-with-ANPR-and-Face-Recognition
+```
 
-4) Test with an image:
-		curl -X POST http://localhost:8000/entry -F "image=@sample_entry.jpg"
-		curl -X POST http://localhost:8000/exit -F "image=@sample_exit.jpg"
+**2. Tạo virtual environment:**
+```bash
+# Windows
+python -m venv .venv
+.venv\Scripts\activate
+
+# Linux/Mac
+python -m venv .venv
+source .venv/bin/activate
+```
+
+**3. Cài đặt dependencies:**
+
+**Option A: GPU Support (CUDA) - Khuyến nghị nếu có GPU:**
+```bash
+pip install -r requirements.txt
+# requirements.txt đã bao gồm onnxruntime-gpu
+```
+
+**Option B: CPU Only (nếu không có GPU):**
+```bash
+# Sửa requirements.txt: comment onnxruntime-gpu, uncomment onnxruntime
+pip install -r requirements.txt
+```
+
+**4. Chạy ứng dụng Desktop GUI:**
+```bash
+python main.py
+```
+
+**5. Hoặc chạy API server:**
+```bash
+uvicorn core.api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Lưu ý về GPU (CUDA)
+
+- **Nếu có GPU NVIDIA**: Hệ thống tự động phát hiện và sử dụng GPU
+- **Nếu không có GPU**: Hệ thống tự động chuyển sang CPU
+- **Để ép dùng GPU**: Set biến môi trường `INSIGHTFACE_PROVIDER=CUDAExecutionProvider`
+- **Cần cài CUDA Toolkit và cuDNN** nếu muốn dùng GPU (xem chi tiết trong code comments)
 
 Notes on Models
 - Plate detection: Demo uses PaddleOCR text boxes only (no detector model).
@@ -91,14 +128,22 @@ Per the spec:
 
 This effectively charges per minute using the PRICE_PER_HOUR value. Adjust PRICE_PER_HOUR to your preferred per-minute rate for demos, or change the logic in core/session/pricing.py.
 
-Configuration
+## Configuration
+
 Environment variables (optional):
-- DATA_DIR (default: data)
-- FACE_THRESHOLD (default: 0.38)
-- PRICE_PER_HOUR (default: 2.0)
-- PLATE_REGEX (default: [A-Z0-9\-]{5,10})
-- INSIGHTFACE_MODEL (default: buffalo_l)
-- INSIGHTFACE_PROVIDER (default: CPUExecutionProvider)
+- `DATA_DIR` (default: `data`) - Thư mục lưu database và ảnh
+- `FACE_THRESHOLD` (default: `0.38`) - Ngưỡng độ tương đồng khuôn mặt (0.0-1.0)
+- `PRICE_PER_HOUR` (default: `2000`) - Giá đỗ xe mỗi giờ (VND)
+- `PLATE_REGEX` (default: `[0-9]{2}[A-Z]?[\-\s]?[A-Z]?[0-9]{4,6}`) - Regex định dạng biển số VN
+- `INSIGHTFACE_MODEL` (default: `buffalo_l`) - Mô hình InsightFace
+- `INSIGHTFACE_PROVIDER` (default: auto-detect) - `CUDAExecutionProvider` hoặc `CPUExecutionProvider`
+
+Tạo file `.env` trong thư mục gốc để cấu hình:
+```env
+FACE_THRESHOLD=0.38
+PRICE_PER_HOUR=2000
+INSIGHTFACE_PROVIDER=CUDAExecutionProvider
+```
 
 Storage
 - SQLite DB at data/app.db

@@ -20,7 +20,8 @@ class PlateOCR:
         try:
             from paddleocr import PaddleOCR  # type: ignore
             # paddleocr>=3.3 removed show_log kwarg; rely on default logging settings.
-            self._paddle = PaddleOCR(use_angle_cls=True, lang="en")
+            # use_gpu=True enables CUDA acceleration if available
+            self._paddle = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=True)
         except Exception as e:
             self._paddle = None
             if DEBUG:

@@ -1,3 +1,4 @@
+# Core dependencies
 fastapi>=0.110
 uvicorn[standard]>=0.24
 SQLAlchemy>=2.0
@@ -10,3 +11,9 @@ insightface>=0.7
 paddleocr>=2.7
 rapidfuzz>=3.0
 customtkinter>=5.2.0
+
+# ONNX Runtime - Choose ONE:
+# For GPU (CUDA) support - requires CUDA Toolkit and cuDNN:
+onnxruntime-gpu>=1.16.0
+# For CPU only (uncomment if no GPU):
+# onnxruntime>=1.16.0

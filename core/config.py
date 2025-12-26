@@ -20,4 +20,7 @@ PLATE_REGEX = os.getenv("PLATE_REGEX", r"[0-9]{2}[A-Z]?[\-\s]?[A-Z]?[0-9]{4,6}")
 PLATE_MIN_CONF = float(os.getenv("PLATE_MIN_CONF", "0.2"))
 
 INSIGHTFACE_MODEL = os.getenv("INSIGHTFACE_MODEL", "buffalo_l")
-INSIGHTFACE_PROVIDER = os.getenv("INSIGHTFACE_PROVIDER", "CPUExecutionProvider")
+# Provider: "CUDAExecutionProvider" for GPU (REQUIRED), "CPUExecutionProvider" for CPU
+# Default: CUDAExecutionProvider (GPU required)
+# Set via environment variable to override: INSIGHTFACE_PROVIDER=CPUExecutionProvider
+INSIGHTFACE_PROVIDER = os.getenv("INSIGHTFACE_PROVIDER", "CUDAExecutionProvider")  # Default: GPU required
