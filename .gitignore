@@ -29,8 +29,6 @@ build/
 # Environment
 .env
 .env.local
-face.jpg
-plate.jpg
 
 # Logs
 *.log

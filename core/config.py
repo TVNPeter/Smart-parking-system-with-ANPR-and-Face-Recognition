@@ -13,7 +13,7 @@ FACES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 FACE_THRESHOLD = float(os.getenv("FACE_THRESHOLD", "0.38"))
-PRICE_PER_HOUR = float(os.getenv("PRICE_PER_HOUR", "2.0"))
+PRICE_PER_HOUR = float(os.getenv("PRICE_PER_HOUR", "2000"))
 
 # Vietnam plate format: 49-E122222, 30A-12345, etc.
 PLATE_REGEX = os.getenv("PLATE_REGEX", r"[0-9]{2}[A-Z]?[\-\s]?[A-Z]?[0-9]{4,6}")

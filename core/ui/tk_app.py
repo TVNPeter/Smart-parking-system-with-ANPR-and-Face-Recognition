@@ -350,6 +350,22 @@ class ParkingUI(ctk.CTk):
         self.btn_checkin.grid(row=2, column=0, padx=8, pady=8, sticky="ew")
         self.btn_checkout.grid(row=2, column=1, padx=8, pady=8, sticky="ew")
 
+        self.fee_var = ctk.StringVar(value="--")
+        fee_frame = ctk.CTkFrame(self.live_tab)
+        fee_frame.grid(row=2, column=2, padx=8, pady=8, sticky="nsew")
+        fee_frame.grid_columnconfigure(0, weight=1)
+        fee_frame.grid_rowconfigure(1, weight=1)
+        ctk.CTkLabel(fee_frame, text="Phí (VND)", font=("Arial", 14, "bold")).grid(row=0, column=0, padx=4, pady=(4, 2), sticky="ew")
+        self.fee_label = ctk.CTkLabel(
+            fee_frame,
+            textvariable=self.fee_var,
+            font=("Arial", 18, "bold"),
+            fg_color="gray20",
+            corner_radius=8,
+            height=44,
+        )
+        self.fee_label.grid(row=1, column=0, padx=4, pady=(2, 6), sticky="nsew")
+
         self.live_tab.grid_columnconfigure(0, weight=2)
         self.live_tab.grid_columnconfigure(1, weight=2)
         self.live_tab.grid_columnconfigure(2, weight=1)
@@ -463,6 +479,7 @@ class ParkingUI(ctk.CTk):
         plate_frame, face_frame = self._select_frames_out()
         if plate_frame is None or face_frame is None:
             self._log("[CheckOut] Please assign roles and ensure frames.")
+            self.fee_var.set("--")
             return
         
         # Debug: check detected plate
@@ -483,6 +500,7 @@ class ParkingUI(ctk.CTk):
         
         res = self.verifier.handle_exit_frame(plate_frame, face_frame)
         self._log(f"[CheckOut] approved={res.approved} fee={res.fee:.2f} sim={res.similarity_score:.3f} session_id={res.session_id} status={res.status}")
+        self.fee_var.set(self._format_fee_vnd(res.fee))
 
     def _reload_sessions(self) -> None:
         from core.db.database import SessionLocal, ParkingSession
@@ -601,6 +619,10 @@ class ParkingUI(ctk.CTk):
     def _log(self, msg: str) -> None:
         self.output.insert("end", msg + "\n")
         self.output.see("end")
+
+    def _format_fee_vnd(self, fee: float) -> str:
+        safe_fee = max(0.0, float(fee))
+        return f"{safe_fee:,.0f} VND"
 
 
 def main() -> None:
