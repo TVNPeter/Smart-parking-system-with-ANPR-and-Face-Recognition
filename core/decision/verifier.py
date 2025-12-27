@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Optional
+import threading
 
 import cv2
 import numpy as np
@@ -103,7 +104,7 @@ class Verifier:
             now = datetime.utcnow()
             if best_sim >= face_threshold:
                 closed = self.sessions.close_session(db, best_rec, time_out=now, similarity=best_sim)
-                fee = compute_fee(closed.time_in, closed.time_out or now, PRICE_PER_HOUR)
+                fee = compute_fee(closed.time_in, closed.time_out or now)
                 return ExitResult(approved=True, fee=fee, similarity_score=best_sim, session_id=closed.session_id, status=closed.status)
 
             flagged = self.sessions.flag_session(db, best_rec, similarity=best_sim)
@@ -112,35 +113,95 @@ class Verifier:
     # --- Frame-based variants (for desktop UI / camera pipelines) ---
 
     def handle_entry_frame(self, plate_frame_bgr: np.ndarray, face_frame_bgr: np.ndarray) -> EntryResult:
-        """Entry flow using in-memory BGR frames (cv2 images)."""
-        plate_bbox, plate_text = self.detector.detect_plate(plate_frame_bgr)
-        face_emb, face_bbox = self.face.extract(face_frame_bgr)
+        """Entry flow using in-memory BGR frames (cv2 images). Optimized with parallel processing."""
+        # OPTIMIZATION: Process OCR and Face recognition in parallel
+        plate_result = [None, None]  # [plate_text, plate_bbox]
+        face_result = [None, None]   # [face_emb, face_bbox]
+        
+        def process_plate():
+            try:
+                plate_bbox, plate_text = self.detector.detect_plate(plate_frame_bgr)
+                plate_result[0] = plate_text
+                plate_result[1] = plate_bbox
+            except Exception:
+                plate_result[0] = ""
+                plate_result[1] = None
+        
+        def process_face():
+            try:
+                face_emb, face_bbox = self.face.extract(face_frame_bgr)
+                face_result[0] = face_emb
+                face_result[1] = face_bbox
+            except Exception:
+                face_result[0] = None
+                face_result[1] = None
+        
+        # Start both threads in parallel
+        thread_plate = threading.Thread(target=process_plate, daemon=True)
+        thread_face = threading.Thread(target=process_face, daemon=True)
+        thread_plate.start()
+        thread_face.start()
+        thread_plate.join()
+        thread_face.join()
+        
+        plate_text = plate_result[0] or ""
+        plate_bbox = plate_result[1]
+        face_emb = face_result[0]
+        face_bbox = face_result[1]
 
         with SessionLocal() as db:
             rec = self.sessions.create_session(
                 db,
-                plate_text=plate_text or "",
+                plate_text=plate_text,
                 image_bgr=plate_frame_bgr,
                 plate_bbox=plate_bbox,
                 face_embedding=face_emb,
                 time_in=datetime.utcnow(),
             )
-            # Save face crop if embedding was extracted
-            if face_emb is not None:
-                try:
-                    face_path = self.sessions.save_face_image(face_frame_bgr, face_bbox)
-                    # Could store face_path in session if needed
-                except Exception:
-                    pass
+            # OPTIMIZATION: Save face crop asynchronously to avoid blocking
+            # This doesn't affect the response time
+            if face_emb is not None and face_bbox is not None:
+                def save_face_async():
+                    try:
+                        self.sessions.save_face_image(face_frame_bgr, face_bbox)
+                    except Exception:
+                        pass
+                threading.Thread(target=save_face_async, daemon=True).start()
             return EntryResult(session_id=rec.session_id, plate_text=rec.plate_text, status=rec.status)
 
     def handle_exit_frame(self, plate_frame_bgr: np.ndarray, face_frame_bgr: np.ndarray, face_threshold: float = FACE_THRESHOLD) -> ExitResult:
-        """Exit flow using in-memory BGR frames (cv2 images)."""
-        _, plate_text = self.detector.detect_plate(plate_frame_bgr)
-        face_emb, _ = self.face.extract(face_frame_bgr)
+        """Exit flow using in-memory BGR frames (cv2 images). Optimized with parallel processing."""
+        # OPTIMIZATION: Process OCR and Face recognition in parallel
+        plate_text_result = [None]
+        face_emb_result = [None]
+        
+        def process_plate():
+            try:
+                _, plate_text = self.detector.detect_plate(plate_frame_bgr)
+                plate_text_result[0] = plate_text
+            except Exception:
+                plate_text_result[0] = ""
+        
+        def process_face():
+            try:
+                face_emb, _ = self.face.extract(face_frame_bgr)
+                face_emb_result[0] = face_emb
+            except Exception:
+                face_emb_result[0] = None
+        
+        # Start both threads in parallel
+        thread_plate = threading.Thread(target=process_plate, daemon=True)
+        thread_face = threading.Thread(target=process_face, daemon=True)
+        thread_plate.start()
+        thread_face.start()
+        thread_plate.join()
+        thread_face.join()
+        
+        plate_text = plate_text_result[0] or ""
+        face_emb = face_emb_result[0]
 
         with SessionLocal() as db:
-            cands = self.sessions.get_active_candidates(db, plate_text or "")
+            cands = self.sessions.get_active_candidates(db, plate_text)
             if not cands:
                 return ExitResult(approved=False, fee=0.0, similarity_score=0.0, session_id=None, status="FLAGGED")
 
@@ -163,7 +224,7 @@ class Verifier:
             now = datetime.utcnow()
             if best_sim >= face_threshold:
                 closed = self.sessions.close_session(db, best_rec, time_out=now, similarity=best_sim)
-                fee = compute_fee(closed.time_in, closed.time_out or now, PRICE_PER_HOUR)
+                fee = compute_fee(closed.time_in, closed.time_out or now)
                 return ExitResult(approved=True, fee=fee, similarity_score=best_sim, session_id=closed.session_id, status=closed.status)
 
             flagged = self.sessions.flag_session(db, best_rec, similarity=best_sim)

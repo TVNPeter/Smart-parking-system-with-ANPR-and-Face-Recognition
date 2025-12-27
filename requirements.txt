@@ -9,6 +9,8 @@ pillow>=10.0.0
 opencv-python-headless>=4.8
 insightface>=0.7
 paddleocr>=2.7
+# PaddlePaddle is required by PaddleOCR (dependency may not auto-install)
+paddlepaddle>=3.2.0
 rapidfuzz>=3.0
 customtkinter>=5.2.0
 

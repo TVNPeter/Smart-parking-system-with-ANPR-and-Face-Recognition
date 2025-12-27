@@ -110,7 +110,9 @@ class FaceRecognizer:
             # We'll verify after initialization
             try:
                 app = FaceAnalysis(name=INSIGHTFACE_MODEL, providers=providers)
-                app.prepare(ctx_id=0, det_size=(640, 640))
+                # OPTIMIZATION: Reduce det_size from 640x640 to 480x480 for faster inference
+                # This reduces processing time while maintaining good accuracy
+                app.prepare(ctx_id=0, det_size=(480, 480))
             except Exception as init_err:
                 error_str = str(init_err).lower()
                 if "cudnn" in error_str or "cannot load symbol" in error_str or "invalid handle" in error_str:

@@ -18,14 +18,43 @@ class PlateOCR:
 
     def _try_init_paddle(self) -> None:
         try:
+            # First check if paddle (PaddlePaddle) is available
+            try:
+                import paddle  # type: ignore
+                if DEBUG:
+                    print(f"[OCR] PaddlePaddle version: {paddle.__version__}")
+            except ImportError as pe:
+                self._paddle = None
+                print(f"[OCR] ERROR: PaddlePaddle not installed! Run: pip install paddlepaddle")
+                print(f"[OCR] Import error: {pe}")
+                return
+            
+            # Then try to import PaddleOCR
             from paddleocr import PaddleOCR  # type: ignore
-            # paddleocr>=3.3 removed show_log kwarg; rely on default logging settings.
-            # use_gpu=True enables CUDA acceleration if available
-            self._paddle = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=True)
+            # PaddleOCR 3.3+ removed use_gpu parameter - GPU is auto-detected
+            # use_angle_cls is also removed in newer versions, but keeping for compatibility
+            try:
+                # Try with use_angle_cls (for older versions)
+                self._paddle = PaddleOCR(lang="en", use_angle_cls=True)
+                if DEBUG:
+                    print("[OCR] PaddleOCR initialized (with angle_cls)")
+            except TypeError:
+                # If use_angle_cls is not supported, try without it
+                self._paddle = PaddleOCR(lang="en")
+                if DEBUG:
+                    print("[OCR] PaddleOCR initialized (without angle_cls)")
+        except ImportError as e:
+            self._paddle = None
+            print(f"[OCR] ERROR: PaddleOCR not installed! Run: pip install paddleocr")
+            print(f"[OCR] Import error: {e}")
+            import traceback
+            traceback.print_exc()
         except Exception as e:
             self._paddle = None
+            print(f"[OCR] ERROR: PaddleOCR initialization failed: {e.__class__.__name__}: {e}")
             if DEBUG:
-                print(f"[OCR] PaddleOCR init failed: {e.__class__.__name__}: {e}")
+                import traceback
+                traceback.print_exc()
 
     def recognize(self, image_bgr: np.ndarray) -> Tuple[str, Optional[Tuple[int, int, int, int]]]:
         if self._paddle is None:

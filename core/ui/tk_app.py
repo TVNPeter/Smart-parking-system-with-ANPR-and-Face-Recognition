@@ -168,6 +168,7 @@ class CameraTile(ctk.CTkFrame):
         self.fixed_role = fixed_role
         self.worker = CameraWorker()
         self.scanning = False
+        self.frozen_frame: Optional[np.ndarray] = None  # Store frozen frame for Face IN camera
         label_text = f"{name} ({fixed_role})\n(no video)" if fixed_role else f"{name}\n(no video)"
         self.image_label = ctk.CTkLabel(self, text=label_text)
         self.image_label.grid(row=0, column=0, columnspan=4, padx=6, pady=6, sticky="nsew")
@@ -255,7 +256,11 @@ class CameraTile(ctk.CTkFrame):
         self.status.configure(text="stopped")
 
     def _update_image(self) -> None:
-        frame = self.worker.get_latest()
+        # Use frozen frame if available (for Face IN camera), otherwise use live frame
+        if self.frozen_frame is not None:
+            frame = self.frozen_frame
+        else:
+            frame = self.worker.get_latest()
         if frame is not None:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(rgb)
@@ -296,7 +301,22 @@ class CameraTile(ctk.CTkFrame):
         return self.role_opt.get() if self.role_opt else "None"
 
     def get_frame(self) -> Optional[np.ndarray]:
+        # Return frozen frame if available, otherwise return live frame
+        if self.frozen_frame is not None:
+            return self.frozen_frame.copy()
         return self.worker.get_latest()
+    
+    def freeze_frame(self) -> None:
+        """Freeze the current frame (used for Face IN camera to preserve check-in image)"""
+        frame = self.worker.get_latest()
+        if frame is not None:
+            self.frozen_frame = frame.copy()
+            self.status.configure(text="frozen (check-in captured)")
+    
+    def unfreeze_frame(self) -> None:
+        """Unfreeze the frame (reset to live camera)"""
+        self.frozen_frame = None
+        self.status.configure(text="live")
 
     def _scan(self) -> None:
         # Run probing asynchronously to avoid blocking the UI thread
@@ -345,7 +365,7 @@ class CameraTile(ctk.CTkFrame):
 class ParkingUI(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Smart Parking - customtkinter")
+        self.title("Smart Parking")
         self.geometry("1600x900")
         init_db()
         self.verifier = Verifier()
@@ -363,7 +383,7 @@ class ParkingUI(ctk.CTk):
         # Project Title
         title_label = ctk.CTkLabel(
             header_content,
-            text="Smart Parking System With Automatic Number Plate Recognition and Face Recognition",
+            text="Smart Parking System With Automatic License Plate Recognition and Face Recognition",
             font=("Arial", 20, "bold"),
             text_color="white"
         )
@@ -407,7 +427,7 @@ class ParkingUI(ctk.CTk):
         self.btn_checkin.grid(row=2, column=0, padx=8, pady=8, sticky="ew")
         self.btn_checkout.grid(row=2, column=1, padx=8, pady=8, sticky="ew")
 
-        self.fee_var = ctk.StringVar(value="--")
+        self.fee_var = ctk.StringVar(value="0 VND")
         fee_frame = ctk.CTkFrame(self.live_tab)
         fee_frame.grid(row=2, column=2, padx=8, pady=8, sticky="nsew")
         fee_frame.grid_columnconfigure(0, weight=1)
@@ -475,7 +495,11 @@ class ParkingUI(ctk.CTk):
 
         # Startup checks and initial data load
         self._check_insightface()
+        self._check_paddleocr()
         self._reload_sessions()
+        
+        # Start real-time fee update (every 1 second)
+        self._update_realtime_fee()
 
     def _check_insightface(self) -> None:
         """Check if InsightFace is properly initialized."""
@@ -488,6 +512,18 @@ class ParkingUI(ctk.CTk):
                 self._log("[STARTUP] InsightFace initialized successfully.")
         except Exception as e:
             self._log(f"[STARTUP] Error checking InsightFace: {e}")
+    
+    def _check_paddleocr(self) -> None:
+        """Check if PaddleOCR is properly initialized."""
+        try:
+            if self.verifier.ocr._paddle is None:
+                self._log("[STARTUP] WARNING: PaddleOCR not initialized!")
+                self._log("[STARTUP] Install: pip install paddleocr")
+                self._log("[STARTUP] License plate recognition will NOT work.")
+            else:
+                self._log("[STARTUP] PaddleOCR initialized successfully.")
+        except Exception as e:
+            self._log(f"[STARTUP] Error checking PaddleOCR: {e}")
 
     def _select_frames_in(self) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
         plate_frame = self.tile_a.get_frame()
@@ -501,73 +537,83 @@ class ParkingUI(ctk.CTk):
 
     def _do_checkin(self) -> None:
         import time
+        import cv2
         start_time = time.time()
+        
+        # Unfreeze Camera B if it was frozen from previous check-in
+        if self.tile_b.frozen_frame is not None:
+            self.tile_b.unfreeze_frame()
         
         plate_frame, face_frame = self._select_frames_in()
         if plate_frame is None or face_frame is None:
-            self._log("[CheckIn] Please assign roles and ensure frames.")
+            self._log("[CheckIn] Please assign roles and ensure frames are available.")
             return
         
-        # Debug: check frame sizes
-        self._log(f"[CheckIn] Plate frame: {plate_frame.shape}, Face frame: {face_frame.shape}")
+        # Freeze Camera B (Face IN) frame to preserve check-in image
+        self.tile_b.freeze_frame()
         
-        # Debug: test face extraction directly
-        try:
-            face_emb, face_bbox = self.verifier.face.extract(face_frame)
-            if face_emb is not None:
-                self._log(f"[CheckIn] Face extracted: emb_shape={face_emb.shape}, bbox={face_bbox}")
-            else:
-                self._log("[CheckIn] WARNING: No face detected in image")
-                # Check if InsightFace is initialized
-                if self.verifier.face._app is None:
-                    self._log("[CheckIn] ERROR: InsightFace not initialized! Run: pip install insightface onnxruntime")
-                else:
-                    self._log("[CheckIn] InsightFace OK but no face found in image (try different photo)")
-        except Exception as e:
-            self._log(f"[CheckIn] ERROR extracting face: {type(e).__name__}: {e}")
+        # OPTIMIZATION: Resize images before processing to reduce inference time
+        # Resize plate image: max 800px width (OCR works well at this size, smaller = faster)
+        h, w = plate_frame.shape[:2]
+        if w > 800:
+            scale = 800.0 / w
+            new_w, new_h = int(w * scale), int(h * scale)
+            plate_frame = cv2.resize(plate_frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
         
+        # Resize face image: max 480px width (face recognition works well at this size)
+        h, w = face_frame.shape[:2]
+        if w > 480:
+            scale = 480.0 / w
+            new_w, new_h = int(w * scale), int(h * scale)
+            face_frame = cv2.resize(face_frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        
+        # Use optimized verifier (handles parallel processing internally)
         res = self.verifier.handle_entry_frame(plate_frame, face_frame)
         
-        # Debug: show if face embedding was captured
-        from core.db.database import SessionLocal
-        with SessionLocal() as db:
-            from core.db.database import ParkingSession
-            rec = db.query(ParkingSession).filter(ParkingSession.session_id == res.session_id).first()
-            has_face = rec.get_embedding() is not None if rec else False
-        
         elapsed_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-        self._log(f"[CheckIn] session_id={res.session_id} plate='{res.plate_text}' status={res.status} has_face={has_face} | Execution time: {elapsed_time:.2f}ms")
+        self._log(f"[CheckIn] session_id={res.session_id[:8]}... plate='{res.plate_text}' status={res.status} | Time: {elapsed_time:.0f}ms")
+        
+        # Reset fee to 0 after check-in (don't show fee until checkout)
+        self.fee_var.set("0 VND")
 
     def _do_checkout(self) -> None:
         import time
+        import cv2
         start_time = time.time()
         
         plate_frame, face_frame = self._select_frames_out()
         if plate_frame is None or face_frame is None:
-            self._log("[CheckOut] Please assign roles and ensure frames.")
-            self.fee_var.set("--")
+            self._log("[CheckOut] Please assign roles and ensure frames are available.")
+            self.fee_var.set("0 VND")
             return
         
-        # Debug: check detected plate
-        from core.anpr.detector import LicensePlateDetector
-        from core.anpr.ocr import PlateOCR
-        ocr = PlateOCR()
-        detector = LicensePlateDetector(ocr)
-        _, plate_text = detector.detect_plate(plate_frame)
+        # OPTIMIZATION: Resize images before processing
+        # Resize plate image: max 800px width
+        h, w = plate_frame.shape[:2]
+        if w > 800:
+            scale = 800.0 / w
+            new_w, new_h = int(w * scale), int(h * scale)
+            plate_frame = cv2.resize(plate_frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
         
-        # Debug: check active sessions
-        from core.db.database import SessionLocal
-        with SessionLocal() as db:
-            from core.db.database import ParkingSession
-            active = db.query(ParkingSession).filter(ParkingSession.status == "ACTIVE").all()
-            self._log(f"[CheckOut] Detected plate: '{plate_text}' | Active sessions: {len(active)}")
-            for sess in active:
-                self._log(f"  - session {sess.session_id[:8]}: plate='{sess.plate_text}' has_face={sess.get_embedding() is not None}")
+        # Resize face image: max 480px width
+        h, w = face_frame.shape[:2]
+        if w > 480:
+            scale = 480.0 / w
+            new_w, new_h = int(w * scale), int(h * scale)
+            face_frame = cv2.resize(face_frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
         
+        # Use optimized verifier (handles parallel processing internally)
         res = self.verifier.handle_exit_frame(plate_frame, face_frame)
+        
         elapsed_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-        self._log(f"[CheckOut] approved={res.approved} fee={res.fee:.2f} sim={res.similarity_score:.3f} session_id={res.session_id} status={res.status} | Execution time: {elapsed_time:.2f}ms")
+        status_text = "✅ Approved" if res.approved else "⚠️ Not matched"
+        self._log(f"[CheckOut] {status_text} | Fee: {res.fee:.0f} VND | Similarity: {res.similarity_score:.3f} | session_id={res.session_id[:8] if res.session_id else 'N/A'}... | Time: {elapsed_time:.0f}ms")
         self.fee_var.set(self._format_fee_vnd(res.fee))
+        
+        # Unfreeze Camera B (Face IN) after successful check-out to allow next check-in
+        if res.approved or res.status in ["COMPLETED", "EXITED"]:
+            if self.tile_b.frozen_frame is not None:
+                self.tile_b.unfreeze_frame()
 
     def _reload_sessions(self) -> None:
         from core.db.database import SessionLocal, ParkingSession
@@ -586,7 +632,8 @@ class ParkingUI(ctk.CTk):
             to = r.time_out.strftime("%Y-%m-%d %H:%M:%S") if r.time_out else ""
             has_face = "yes" if r.get_embedding() is not None else "no"
             sim = f"{r.similarity:.3f}" if r.similarity is not None else "-"
-            lines.append(f"{r.session_id} | {r.plate_text} | {r.status} | {ti} | {to} | {has_face} | {sim}")
+            plate = r.plate_text if r.plate_text else "(empty)"  # Handle None or empty plate_text
+            lines.append(f"{r.session_id} | {plate} | {r.status} | {ti} | {to} | {has_face} | {sim}")
 
         self.db_text.configure(state="normal")
         self.db_text.delete("1.0", "end")
@@ -690,6 +737,43 @@ class ParkingUI(ctk.CTk):
     def _format_fee_vnd(self, fee: float) -> str:
         safe_fee = max(0.0, float(fee))
         return f"{safe_fee:,.0f} VND"
+    
+    def _update_realtime_fee(self) -> None:
+        """Keep fee at 0 during active session, only show fee after checkout.
+        Fee is set in _do_checkout() after successful checkout.
+        """
+        from core.db.database import SessionLocal, ParkingSession
+        
+        try:
+            with SessionLocal() as db:
+                # Find the most recent active session
+                active_session = (
+                    db.query(ParkingSession)
+                    .filter(ParkingSession.status == "ACTIVE")
+                    .order_by(ParkingSession.time_in.desc())
+                    .first()
+                )
+                
+                current_value = self.fee_var.get()
+                
+                if active_session:
+                    # During active session, keep fee at 0 (don't show real-time fee)
+                    # Only reset to 0 if it's not a checkout fee (checkout fee has comma)
+                    if "," not in current_value:
+                        self.fee_var.set("0 VND")
+                else:
+                    # No active session
+                    # Only reset to 0 if currently showing 0 or if value doesn't look like a fee
+                    # This preserves checkout fee which is set in _do_checkout
+                    if current_value == "0 VND" or ("," not in current_value and current_value != "0 VND" and "VND" not in current_value):
+                        self.fee_var.set("0 VND")
+                    # Otherwise keep the current value (checkout fee)
+        except Exception as e:
+            # Silently handle errors to avoid spamming logs
+            pass
+        
+        # Schedule next update in 1 second
+        self.after(1000, self._update_realtime_fee)
 
 
 def main() -> None:
