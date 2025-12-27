@@ -500,6 +500,9 @@ class ParkingUI(ctk.CTk):
         return plate_frame, face_frame
 
     def _do_checkin(self) -> None:
+        import time
+        start_time = time.time()
+        
         plate_frame, face_frame = self._select_frames_in()
         if plate_frame is None or face_frame is None:
             self._log("[CheckIn] Please assign roles and ensure frames.")
@@ -532,9 +535,13 @@ class ParkingUI(ctk.CTk):
             rec = db.query(ParkingSession).filter(ParkingSession.session_id == res.session_id).first()
             has_face = rec.get_embedding() is not None if rec else False
         
-        self._log(f"[CheckIn] session_id={res.session_id} plate='{res.plate_text}' status={res.status} has_face={has_face}")
+        elapsed_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+        self._log(f"[CheckIn] session_id={res.session_id} plate='{res.plate_text}' status={res.status} has_face={has_face} | Execution time: {elapsed_time:.2f}ms")
 
     def _do_checkout(self) -> None:
+        import time
+        start_time = time.time()
+        
         plate_frame, face_frame = self._select_frames_out()
         if plate_frame is None or face_frame is None:
             self._log("[CheckOut] Please assign roles and ensure frames.")
@@ -558,7 +565,8 @@ class ParkingUI(ctk.CTk):
                 self._log(f"  - session {sess.session_id[:8]}: plate='{sess.plate_text}' has_face={sess.get_embedding() is not None}")
         
         res = self.verifier.handle_exit_frame(plate_frame, face_frame)
-        self._log(f"[CheckOut] approved={res.approved} fee={res.fee:.2f} sim={res.similarity_score:.3f} session_id={res.session_id} status={res.status}")
+        elapsed_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+        self._log(f"[CheckOut] approved={res.approved} fee={res.fee:.2f} sim={res.similarity_score:.3f} session_id={res.session_id} status={res.status} | Execution time: {elapsed_time:.2f}ms")
         self.fee_var.set(self._format_fee_vnd(res.fee))
 
     def _reload_sessions(self) -> None:
