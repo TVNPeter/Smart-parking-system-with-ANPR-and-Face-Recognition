@@ -204,9 +204,14 @@ class CameraTile(ctk.CTkFrame):
         self.status = ctk.CTkLabel(self, text="idle")
         self.status.grid(row=3, column=0, columnspan=4, padx=6, pady=4, sticky="ew")
 
+        # Configure grid weights for consistent sizing
         for i in range(4):
-            self.grid_columnconfigure(i, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+            self.grid_columnconfigure(i, weight=1, uniform="camera_col")
+        # Row 0 (image) gets most space, rows 1-3 (controls) get minimal space
+        self.grid_rowconfigure(0, weight=1, uniform="camera_row")
+        self.grid_rowconfigure(1, weight=0)
+        self.grid_rowconfigure(2, weight=0)
+        self.grid_rowconfigure(3, weight=0)
 
         self.after(100, self._update_image)  # Reduced from 50ms
         self.after(250, self._update_status)  # Reduced from 100ms
@@ -254,10 +259,32 @@ class CameraTile(ctk.CTkFrame):
         if frame is not None:
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(rgb)
-            # scale down to fit label
-            w = max(160, min(480, self.image_label.winfo_width() or 320))
-            h = max(120, min(360, self.image_label.winfo_height() or 240))
-            img = img.resize((w, h))
+            # Get label dimensions, ensure consistent sizing across all tiles
+            label_w = self.image_label.winfo_width()
+            label_h = self.image_label.winfo_height()
+            if label_w > 1 and label_h > 1:
+                # Use actual label size for consistent display
+                w = label_w
+                h = label_h
+            else:
+                # Fallback: use fixed aspect ratio (16:9) for consistency
+                w = 400
+                h = 300
+            # Maintain aspect ratio
+            frame_aspect = frame.shape[1] / frame.shape[0]
+            label_aspect = w / h
+            if frame_aspect > label_aspect:
+                # Frame is wider, fit to width
+                w = min(w, 480)
+                h = int(w / frame_aspect)
+            else:
+                # Frame is taller, fit to height
+                h = min(h, 360)
+                w = int(h * frame_aspect)
+            # Ensure minimum size
+            w = max(160, w)
+            h = max(120, h)
+            img = img.resize((w, h), Image.Resampling.LANCZOS)
             cimg = ctk.CTkImage(light_image=img, dark_image=img, size=(w, h))
             self.image_label.configure(image=cimg, text="")
             self.image_label.image = cimg
@@ -323,9 +350,38 @@ class ParkingUI(ctk.CTk):
         init_db()
         self.verifier = Verifier()
 
+        # Header Banner with project title and team members
+        header_frame = ctk.CTkFrame(self, fg_color=("#1f538d", "#14375e"), corner_radius=0)
+        header_frame.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
+        header_frame.grid_columnconfigure(0, weight=1)
+        
+        # Inner container for padding
+        header_content = ctk.CTkFrame(header_frame, fg_color="transparent")
+        header_content.grid(row=0, column=0, sticky="ew", padx=20, pady=12)
+        header_content.grid_columnconfigure(0, weight=1)
+        
+        # Project Title
+        title_label = ctk.CTkLabel(
+            header_content,
+            text="Smart Parking System With Automatic Number Plate Recognition and Face Recognition",
+            font=("Arial", 20, "bold"),
+            text_color="white"
+        )
+        title_label.grid(row=0, column=0, pady=(0, 10), sticky="ew")
+        
+        # Team Members
+        members_text = "23110021 Võ Trúc Hồ  |  23110069 Hoàng Đức Tuấn  |  23110057 Trác Văn Ngọc Phúc"
+        members_label = ctk.CTkLabel(
+            header_content,
+            text=members_text,
+            font=("Arial", 14),
+            text_color="#e0e0e0"
+        )
+        members_label.grid(row=1, column=0, pady=0, sticky="ew")
+
         # Tabs: Live cameras + Sessions (DB viewer)
         self.tabview = ctk.CTkTabview(self)
-        self.tabview.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+        self.tabview.grid(row=1, column=0, sticky="nsew", padx=6, pady=6)
         self.live_tab = self.tabview.add("Live")
         self.sessions_tab = self.tabview.add("Sessions")
 
@@ -335,10 +391,11 @@ class ParkingUI(ctk.CTk):
         self.tile_c = CameraTile(self.live_tab, "Camera C", fixed_role="Plate OUT")
         self.tile_d = CameraTile(self.live_tab, "Camera D", fixed_role="Face OUT")
 
-        self.tile_a.grid(row=0, column=0, padx=8, pady=8, sticky="nsew")
-        self.tile_b.grid(row=0, column=1, padx=8, pady=8, sticky="nsew")
-        self.tile_c.grid(row=1, column=0, padx=8, pady=8, sticky="nsew")
-        self.tile_d.grid(row=1, column=1, padx=8, pady=8, sticky="nsew")
+        # Grid 4 camera tiles with consistent padding and sizing
+        self.tile_a.grid(row=0, column=0, padx=(8, 4), pady=(8, 4), sticky="nsew")
+        self.tile_b.grid(row=0, column=1, padx=(4, 8), pady=(8, 4), sticky="nsew")
+        self.tile_c.grid(row=1, column=0, padx=(8, 4), pady=(4, 8), sticky="nsew")
+        self.tile_d.grid(row=1, column=1, padx=(4, 8), pady=(4, 8), sticky="nsew")
 
         log_label = ctk.CTkLabel(self.live_tab, text="Log", font=("Arial", 14, "bold"))
         log_label.grid(row=0, column=2, padx=8, pady=(8, 0), sticky="ew")
@@ -366,11 +423,12 @@ class ParkingUI(ctk.CTk):
         )
         self.fee_label.grid(row=1, column=0, padx=4, pady=(2, 6), sticky="nsew")
 
-        self.live_tab.grid_columnconfigure(0, weight=2)
-        self.live_tab.grid_columnconfigure(1, weight=2)
+        # Configure grid weights for consistent camera tile sizing
+        self.live_tab.grid_columnconfigure(0, weight=1, uniform="live_col")
+        self.live_tab.grid_columnconfigure(1, weight=1, uniform="live_col")
         self.live_tab.grid_columnconfigure(2, weight=1)
-        self.live_tab.grid_rowconfigure(0, weight=1)
-        self.live_tab.grid_rowconfigure(1, weight=1)
+        self.live_tab.grid_rowconfigure(0, weight=1, uniform="live_row")
+        self.live_tab.grid_rowconfigure(1, weight=1, uniform="live_row")
 
         # --- Sessions tab layout ---
         controls = ctk.CTkFrame(self.sessions_tab)
@@ -411,7 +469,8 @@ class ParkingUI(ctk.CTk):
         self.sessions_tab.grid_columnconfigure(0, weight=1)
 
         # Window grid
-        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=0)  # Header (fixed height)
+        self.grid_rowconfigure(1, weight=1)  # Tabview (expandable)
         self.grid_columnconfigure(0, weight=1)
 
         # Startup checks and initial data load
